@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+
+<head>
+  <title>One-Dot</title>
+
+  <meta charset="utf-8">
+  <meta name="theme-color" content="#000000">
+
+  <meta property="og:image" content="https://one-dot.aatomu.work/canvas.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="One-Dot" />
+  <meta property="og:description" content="One dot write in 1 min
+  Canvas size: 256x256" />
+
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:site" content="@aatomu" />
+  <meta name="twitter:creator" content="@aatomu21263" />
+
+  <link href="/canvas.png" rel="icon">
+
+  <style>
+    :root {
+      --color-width: 10vw;
+      --color-width-max: 40px;
+    }
+
+    .color-list {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      width: calc(var(--color-width)* 14);
+      max-width: calc(var(--color-width-max) * 14);
+    }
+
+    .color {
+      width: var(--color-width);
+      max-width: var(--color-width-max);
+      aspect-ratio: 1/1;
+
+      box-sizing: border-box;
+      border-style: solid;
+      border-color: black;
+      border-width: 2px;
+
+      opacity: 0.4;
+    }
+
+    .select {
+      opacity: 1;
+    }
+
+    button {
+      padding: 5px;
+      margin: 10px;
+
+      font-size: larger;
+    }
+
+    .canvas-area {
+      position: relative;
+      overflow-x: scroll;
+      overflow-y: scroll;
+      height: min(90vw, 70vh);
+      aspect-ratio: 1/1;
+
+      background-color: gainsboro;
+    }
+
+    .canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: top left;
+      margin: 16px;
+
+      image-rendering: pixelated;
+      -webkit-user-drag: none;
+    }
+
+    .pixel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform-origin: top left;
+      margin: 16px;
+
+      width: 1px;
+      height: 1px;
+
+      animation: blinking 0.25s ease-in-out infinite alternate;
+    }
+
+    @keyframes blinking {
+      0% {
+        opacity: 0;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="color-list" id="colors"> </div>
+  <div>
+    <button id="zoomIn">Zoom in(+)</button>
+    <button id="zoomOut">Zoom out(-)</button>
+    <button id="place">Place dot</button>
+    <span id="message"></span>
+  </div>
+  <div>
+    <span>Click: select pixel. "Place": place a pixel.</span><br>
+    <span>Must wait after drawing a pixel</span>
+  </div>
+  <div class="canvas-area" id="canvas-area">
+    <img class="canvas" id="canvas" src="/canvas.png">
+    <div class="pixel" id="pixel"></div>
+  </div>
+</body>
+
+<script>
+  const COLORS = document.getElementById("colors")
+  let colorList = []
+  let colorIndex = 0
+  const MESSAGE = document.getElementById("message")
+  const CANVAS_AREA = document.getElementById("canvas-area")
+  const CANVAS = document.getElementById("canvas")
+  let zoom = 8
+  const PIXEL = document.getElementById("pixel")
+  let pos = [0, 0]
+
+  function select(e) {
+    console.log(e)
+
+    COLORS.children[colorIndex].classList.remove("select")
+    colorIndex = this.dataset.index
+    COLORS.children[colorIndex].classList.add("select")
+    PIXEL.style.backgroundColor = colorList[colorIndex]
+  }
+
+  async function loadColor() {
+    const COLOR_LIST = await fetch(`/color_list.json`).then(res => { return res.json() })
+
+    COLOR_LIST.forEach((color, index) => {
+      const COLOR = document.createElement("div")
+      COLOR.classList.add("color")
+      if (index == 0) {
+        COLOR.classList.add("select")
+      }
+      COLOR.style.backgroundColor = color
+      colorList.push(color)
+      COLOR.dataset.index = index
+      COLOR.addEventListener("click", select)
+
+      COLORS.append(COLOR)
+    });
+    COLORS.children[0].click()
+  }
+
+  document.getElementById("zoomIn").addEventListener("click", function () {
+    zoom = zoom * 2
+    setPosition()
+  })
+  document.getElementById("zoomOut").addEventListener("click", function () {
+    zoom = Math.max(1, zoom / 2)
+    setPosition()
+  })
+  function setPosition() {
+    CANVAS.style.transform = `scale(${zoom})`
+    PIXEL.style.transform = `translate(${pos[0] * zoom}px,${pos[1] * zoom}px) scale(${zoom})`
+  }
+
+  CANVAS_AREA.addEventListener("click", function (e) {
+    if (e.srcElement.id != "canvas") {
+      return
+    }
+    const X = Math.floor(e.offsetX);
+    const Y = Math.floor(e.offsetY);
+    console.log(`click ${pos}`)
+    pos = [X, Y]
+    setPosition()
+  })
+
+  async function updateMessage() {
+    const NEXT_WRITE = await fetch(`/interval`).then(res => res.text())
+    if (NEXT_WRITE == "") {
+      MESSAGE.innerText = ``
+      return
+    }
+    const NEXT_WRITE_TIME = new Date(parseInt(NEXT_WRITE))
+    const NOW = new Date()
+    MESSAGE.innerText = `Next write: ${NEXT_WRITE_TIME.toLocaleTimeString()}`
+
+    setTimeout(function () {
+      MESSAGE.innerText = ""
+    }, NEXT_WRITE_TIME - NOW)
+  }
+
+  document.getElementById("place").addEventListener("click", async function (e) {
+    console.log(pos)
+    await fetch(`/place?x=${pos[0]}&y=${pos[1]}&index=${colorIndex}`)
+    updateMessage()
+    CANVAS.src = `/canvas.png?${new Date().getTime()}`
+  })
+
+  setInterval(function () {
+    CANVAS.src = `/canvas.png?${new Date().getTime()}`
+  }, 5000)
+
+  loadColor()
+  CANVAS.src = `/canvas.png?${new Date().getTime()}`
+  setPosition()
+  updateMessage()
+</script>
